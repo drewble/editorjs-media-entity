@@ -1,4 +1,7 @@
 module.exports = {
+  externals: {
+    jquery: 'jQuery'
+  },
   entry: './src/index.js',
   module: {
     rules: [
@@ -27,7 +30,7 @@ module.exports = {
     path: __dirname + '/dist',
     publicPath: '/',
     filename: 'bundle.js',
-    library: 'SimpleImage',
+    library: 'MediaImage',
     libraryTarget: 'umd'
   }
 };

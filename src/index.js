@@ -1,25 +1,29 @@
+var $ = require('jquery');
+
 /**
  * Build styles
  */
 require('./index.css').toString();
 
 /**
- * SimpleImage Tool for the Editor.js
+ * MediaImage Tool for the Editor.js
  * Works only with pasted image URLs and requires no server-side uploader.
  *
- * @typedef {object} SimpleImageData
+ * @typedef {object} MediaImageData
  * @description Tool's input and output data format
  * @property {string} url — image URL
  * @property {string} caption — image caption
  * @property {boolean} withBorder - should image be rendered with border
- * @property {boolean} withBackground - should image be rendered with background
- * @property {boolean} stretched - should image be stretched to full width of container
+ * @property {boolean} withBackground - should image be rendered with
+ *   background
+ * @property {boolean} stretched - should image be stretched to full width of
+ *   container
  */
-class SimpleImage {
+class MediaImage {
   /**
    * Render plugin`s main Element and fill it with saved data
    *
-   * @param {{data: SimpleImageData, config: object, api: object}}
+   * @param {{data: MediaImageData, config: object, api: object}}
    *   data — previously saved data
    *   config - user config for Tool
    *   api - Editor.js API
@@ -31,13 +35,15 @@ class SimpleImage {
      */
     this.api = api;
     this.readOnly = readOnly;
-
+    this.config = config;
+    this.once = false;
     /**
      * When block is only constructing,
      * current block points to previous block.
      * So real block index will be +1 after rendering
      *
-     * @todo place it at the `rendered` event hook to get real block index without +1;
+     * @todo place it at the `rendered` event hook to get real block index
+     *   without +1;
      * @type {number}
      */
     this.blockIndex = this.api.blocks.getCurrentBlockIndex() + 1;
@@ -55,9 +61,9 @@ class SimpleImage {
       /**
        * Tool's classes
        */
-      wrapper: 'cdx-simple-image',
-      imageHolder: 'cdx-simple-image__picture',
-      caption: 'cdx-simple-image__caption',
+      wrapper: 'cdx-media-image',
+      imageHolder: 'cdx-media-image__picture',
+      caption: 'cdx-media-image__caption',
     };
 
     /**
@@ -75,10 +81,12 @@ class SimpleImage {
      */
     this.data = {
       url: data.url || '',
+      uuid: data.uuid || '',
       caption: data.caption || '',
       withBorder: data.withBorder !== undefined ? data.withBorder : false,
       withBackground: data.withBackground !== undefined ? data.withBackground : false,
       stretched: data.stretched !== undefined ? data.stretched : false,
+      center: data.center !== undefined ? data.center : false,
     };
 
     /**
@@ -97,7 +105,18 @@ class SimpleImage {
         name: 'withBackground',
         icon: `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.043 8.265l3.183-3.183h-2.924L4.75 10.636v2.923l4.15-4.15v2.351l-2.158 2.159H8.9v2.137H4.7c-1.215 0-2.2-.936-2.2-2.09v-8.93c0-1.154.985-2.09 2.2-2.09h10.663l.033-.033.034.034c1.178.04 2.12.96 2.12 2.089v3.23H15.3V5.359l-2.906 2.906h-2.35zM7.951 5.082H4.75v3.201l3.201-3.2zm5.099 7.078v3.04h4.15v-3.04h-4.15zm-1.1-2.137h6.35c.635 0 1.15.489 1.15 1.092v5.13c0 .603-.515 1.092-1.15 1.092h-6.35c-.635 0-1.15-.489-1.15-1.092v-5.13c0-.603.515-1.092 1.15-1.092z"/></svg>`,
       },
+      {
+        name: 'center',
+        icon: `<svg width="24" height="24" viewBox="0 0 24 24"><path d="M3,3H21V5H3V3M7,7H17V9H7V7M3,11H21V13H3V11M7,15H17V17H7V15M3,19H21V21H3V19Z" /></svg>`,
+      }
     ];
+  }
+
+  static get toolbox() {
+    return {
+      title: 'Image',
+      icon: '<svg width="17" height="15" viewBox="0 0 336 276" xmlns="http://www.w3.org/2000/svg"><path d="M291 150V79c0-19-15-34-34-34H79c-19 0-34 15-34 34v42l67-44 81 72 56-29 42 30zm0 52l-43-30-56 30-81-67-66 39v23c0 19 15 34 34 34h178c17 0 31-13 34-29zM79 0h178c44 0 79 35 79 79v118c0 44-35 79-79 79H79c-44 0-79-35-79-79V79C0 35 35 0 79 0z"/></svg>'
+    };
   }
 
   /**
@@ -109,6 +128,20 @@ class SimpleImage {
    * @public
    */
   render() {
+    let ajaxDialog = Drupal.ajax({
+      dialog: this.config.DrupalMediaLibrary_dialogOptions,
+      dialogType: 'modal',
+      selector: '.ckeditor-dialog-loading-link',
+      url: this.config.DrupalMediaLibrary_url,
+    });
+    $(window).on('editor:dialogsave', (e, values) => {
+      if (!this.once && values.hasOwnProperty('editorjs_opener')) {
+        this.nodes.image.src = values['editorjs_opener']['url'];
+        this._data.uuid = values['editorjs_opener']['uuid'];
+        this.once = true;
+      }
+    });
+
     const wrapper = this._make('div', [this.CSS.baseClass, this.CSS.wrapper]),
         loader = this._make('div', this.CSS.loading),
         imageHolder = this._make('div', this.CSS.imageHolder),
@@ -118,12 +151,14 @@ class SimpleImage {
           innerHTML: this.data.caption || '',
         });
 
-    caption.dataset.placeholder = 'Enter a caption';
+    caption.dataset.placeholder = this.config.placeholder || this.api.i18n.t('Enter a caption');
 
     wrapper.appendChild(loader);
-
     if (this.data.url) {
       image.src = this.data.url;
+    }
+    else {
+      ajaxDialog.execute();
     }
 
     image.onload = () => {
@@ -151,7 +186,7 @@ class SimpleImage {
   /**
    * @public
    * @param {Element} blockContent - Tool's wrapper
-   * @returns {SimpleImageData}
+   * @returns {MediaImageData}
    */
   save(blockContent) {
     const image = blockContent.querySelector('img'),
@@ -196,7 +231,7 @@ class SimpleImage {
    *
    * @static
    * @param {File} file
-   * @returns {Promise<SimpleImageData>}
+   * @returns {Promise<MediaImageData>}
    */
   onDropHandler(file) {
     const reader = new FileReader();
@@ -214,47 +249,9 @@ class SimpleImage {
   }
 
   /**
-   * On paste callback that is fired from Editor.
-   *
-   * @param {PasteEvent} event - event with pasted config
-   */
-  onPaste(event) {
-    switch (event.type) {
-      case 'tag': {
-        const img = event.detail.data;
-
-        this.data = {
-          url: img.src,
-        };
-        break;
-      }
-
-      case 'pattern': {
-        const { data: text } = event.detail;
-
-        this.data = {
-          url: text,
-        };
-        break;
-      }
-
-      case 'file': {
-        const { file } = event.detail;
-
-        this.onDropHandler(file)
-          .then(data => {
-            this.data = data;
-          });
-
-        break;
-      }
-    }
-  }
-
-  /**
    * Returns image data
    *
-   * @returns {SimpleImageData}
+   * @returns {MediaImageData}
    */
   get data() {
     return this._data;
@@ -263,7 +260,7 @@ class SimpleImage {
   /**
    * Set image data and update the view
    *
-   * @param {SimpleImageData} data
+   * @param {MediaImageData} data
    */
   set data(data) {
     this._data = Object.assign({}, this.data, data);
@@ -365,12 +362,8 @@ class SimpleImage {
   _acceptTuneView() {
     this.settings.forEach(tune => {
       this.nodes.imageHolder.classList.toggle(this.CSS.imageHolder + '--' + tune.name.replace(/([A-Z])/g, (g) => `-${g[0].toLowerCase()}`), !!this.data[tune.name]);
-
-      if (tune.name === 'stretched') {
-        this.api.blocks.stretchBlock(this.blockIndex, !!this.data.stretched);
-      }
     });
   }
 }
 
-module.exports = SimpleImage;
+module.exports = MediaImage;
