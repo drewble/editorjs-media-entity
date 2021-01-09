@@ -1,4 +1,5 @@
-var $ = require('jquery');
+let $ = require('jquery');
+let ajax = require('@codexteam/ajax');
 
 /**
  * Build styles
@@ -13,6 +14,9 @@ require('./index.css').toString();
  * @description Tool's input and output data format
  * @property {string} url — image URL
  * @property {string} caption — image caption
+ * @property {string} file_uuid — The file uuid
+ * @property {string} image_style — The image style
+ * @property {string} view_mode — The view mode
  * @property {boolean} withBorder - should image be rendered with border
  * @property {boolean} withBackground - should image be rendered with
  *   background
@@ -82,6 +86,9 @@ class MediaImage {
     this.data = {
       url: data.url || '',
       uuid: data.uuid || '',
+      file_uuid: data.file_uuid || '',
+      image_style: data.image_style || '',
+      view_mode: data.view_mode || config.view_mode || '',
       caption: data.caption || '',
       withBorder: data.withBorder !== undefined ? data.withBorder : false,
       withBackground: data.withBackground !== undefined ? data.withBackground : false,
@@ -135,10 +142,10 @@ class MediaImage {
       url: this.config.DrupalMediaLibrary_url,
     });
     $(window).on('editor:dialogsave', (e, values) => {
-      if (!this.once && values.hasOwnProperty('editorjs_opener')) {
+      if (!this.nodes.image.src && values.hasOwnProperty('editorjs_opener')) {
         this.nodes.image.src = values['editorjs_opener']['url'];
         this._data.uuid = values['editorjs_opener']['uuid'];
-        this.once = true;
+        this._data.file_uuid = values['editorjs_opener']['file_uuid'];
       }
     });
 
@@ -227,28 +234,6 @@ class MediaImage {
   }
 
   /**
-   * Read pasted image and convert it to base64
-   *
-   * @static
-   * @param {File} file
-   * @returns {Promise<MediaImageData>}
-   */
-  onDropHandler(file) {
-    const reader = new FileReader();
-
-    reader.readAsDataURL(file);
-
-    return new Promise(resolve => {
-      reader.onload = (event) => {
-        resolve({
-          url: event.target.result,
-          caption: file.name,
-        });
-      };
-    });
-  }
-
-  /**
    * Returns image data
    *
    * @returns {MediaImageData}
@@ -316,8 +301,104 @@ class MediaImage {
       wrapper.appendChild(el);
     });
 
+    // Add button for choose image style.
+    if (this.config.image_styles && Object.keys(this.config.image_styles).length && this.data.view_mode === '') {
+      wrapper.appendChild(this.makeImageStyleTune());
+    }
+
     return wrapper;
   };
+
+  makeImageStyleTune() {
+    const title = this.api.i18n.t('Choose image style');
+    const el = this._make('div', [this.CSS.settingsButton], {
+      innerHTML: '<svg width="24" height="24" viewBox="0 0 24 24"> <path fill="currentColor" d="M22.7 14.3L21.7 15.3L19.7 13.3L20.7 12.3C20.8 12.2 20.9 12.1 21.1 12.1C21.2 12.1 21.4 12.2 21.5 12.3L22.8 13.6C22.9 13.8 22.9 14.1 22.7 14.3M13 19.9V22H15.1L21.2 15.9L19.2 13.9L13 19.9M21 5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H11V19.1L12.1 18H5L8.5 13.5L11 16.5L14.5 12L16.1 14.1L21 9.1V5Z" /></svg>',
+      title,
+    });
+    el.addEventListener('click', () => {
+      const imageStyleEl = el.parentElement.querySelector('.choose_image_style');
+      if (!imageStyleEl) {
+        this.makeImageSelect(el)
+      }
+      else {
+        imageStyleEl.classList.toggle('showed', !imageStyleEl.classList.contains('showed'))
+      }
+    });
+
+    el.dataset.tune = 'image_style';
+    el.classList.toggle(this.CSS.settingsButtonActive, true);
+
+    this.api.tooltip.onHover(el, title, {
+      placement: 'top',
+    });
+
+    return el;
+  }
+
+  /**
+   * Make select element for choose image style.
+   *
+   * @param {Element} tuneEl
+   */
+  makeImageSelect(tuneEl) {
+    const select = this._make('div', ['choose_image_style', 'showed']);
+    select.appendChild(this._make('div', 'label', {'innerHTML': 'Image styles'}));
+    const list = this._make('div', 'list_styles');
+    Object.keys(this.config.image_styles).map((id) => {
+      let classes = ['style_id'];
+      if (this.data.image_style === id) {
+        classes.push('active');
+      }
+      let item = this._make('div', classes, {
+        'innerHTML': this.config.image_styles[id],
+      })
+      item.dataset.value = id;
+      list.appendChild(item)
+    })
+    select.appendChild(list);
+    select.addEventListener('click', (e) => {
+      if (e.target.classList.contains('style_id')) {
+        this.setImageStyle(e.target.dataset.value)
+        list.querySelector('.style_id.active').classList.toggle('active', false);
+        e.target.classList.toggle('active', true);
+      }
+    })
+    tuneEl.parentElement.appendChild(select);
+  }
+
+  /**
+   * Setter image style value and set temp image url.
+   *
+   * @param {string} imageStyleId
+   */
+  setImageStyle(imageStyleId) {
+    this._data.image_style = imageStyleId;
+    if (imageStyleId === '') {
+      this.nodes.image.src = this._data.url;
+      return;
+    }
+    let loader = this._make('div', this.CSS.loading);
+    this.nodes.wrapper.appendChild(loader)
+    this.nodes.image.style.display = 'none'
+    let upload = ajax.post({
+      url: this.config.endpoints.fetchStyleUrl,
+      data: {
+        'uuid': this._data.file_uuid,
+        'image_style_id': this._data.image_style,
+      },
+      type: ajax.contentType.JSON,
+      headers: {
+        'X-CSRF-Token': this.config.endpoints.token
+      },
+    }).then(response => response.body);
+    upload.then((response) => {
+      this.nodes.image.src = response.url;
+      loader.remove();
+      this.nodes.image.style.display = 'inherit'
+    }).catch((error) => {
+      console.error(error);
+    });
+  }
 
   /**
    * Helper for making Elements with attributes
