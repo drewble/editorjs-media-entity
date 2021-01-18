@@ -1,6 +1,7 @@
 module.exports = {
   externals: {
-    jquery: 'jQuery'
+    jquery: 'jQuery',
+    Drupal: 'Drupal'
   },
   entry: './src/index.js',
   module: {

@@ -1,5 +1,20 @@
 let $ = require('jquery');
+let Drupal = require('Drupal');
 let ajax = require('@codexteam/ajax');
+
+/**
+ * Command to save the contents of an editor-provided modal.
+ *
+ * @param {Drupal.Ajax} ajax
+ *   The Drupal.Ajax object.
+ * @param {object} response
+ *   The server response from the ajax request.
+ * @param {number} status
+ *   The status code from the ajax request.
+ */
+Drupal.AjaxCommands.prototype.editorJsDialogSave = function (ajax, response, status) {
+  $(window).trigger('editorjs:mediadialogsave', [response.values]);
+};
 
 /**
  * Build styles
@@ -143,11 +158,11 @@ class MediaImage {
       selector: '.ckeditor-dialog-loading-link',
       url: this.config.DrupalMediaLibrary_url,
     });
-    $(window).on('editor:dialogsave', (e, values) => {
-      if (!this.nodes.image.src && values.hasOwnProperty('editorjs_opener')) {
-        this.nodes.image.src = values['editorjs_opener']['url'];
-        this._data.uuid = values['editorjs_opener']['uuid'];
-        this._data.file_uuid = values['editorjs_opener']['file_uuid'];
+    $(window).on('editorjs:mediadialogsave', (e, values) => {
+      if (!this.nodes.image.src && values.hasOwnProperty('uuid') && values.hasOwnProperty('url')) {
+        this.nodes.image.src = values['url'];
+        this._data.uuid = values['uuid'];
+        this._data.file_uuid = values['file_uuid'];
       }
     });
 
@@ -375,10 +390,6 @@ class MediaImage {
    */
   setImageStyle(imageStyleId) {
     this._data.image_style = imageStyleId;
-    if (imageStyleId === '') {
-      this.nodes.image.src = this._data.url;
-      return;
-    }
     let loader = this._make('div', this.CSS.loading);
     this.nodes.wrapper.appendChild(loader)
     this.nodes.image.style.display = 'none'
