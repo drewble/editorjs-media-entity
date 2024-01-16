@@ -22,10 +22,10 @@ Drupal.AjaxCommands.prototype.editorJsDialogSave = function (ajax, response, sta
 require('./index.css').toString();
 
 /**
- * MediaImage Tool for the Editor.js
+ * MediaEntity Tool for the Editor.js
  * Works only with pasted image URLs and requires no server-side uploader.
  *
- * @typedef {object} MediaImageData
+ * @typedef {object} MediaEntityData
  * @description Tool's input and output data format
  * @property {string} url — image URL
  * @property {string} caption — image caption
@@ -38,11 +38,11 @@ require('./index.css').toString();
  * @property {boolean} stretched - should image be stretched to full width of
  *   container
  */
-class MediaImage {
+class MediaEntity {
   /**
    * Render plugin`s main Element and fill it with saved data
    *
-   * @param {{data: MediaImageData, config: object, api: object}}
+   * @param {{data: MediaEntityData, config: object, api: object}}
    *   data — previously saved data
    *   config - user config for Tool
    *   api - Editor.js API
@@ -210,7 +210,7 @@ class MediaImage {
   /**
    * @public
    * @param {Element} blockContent - Tool's wrapper
-   * @returns {MediaImageData}
+   * @returns {MediaEntityData}
    */
   save(blockContent) {
     const image = blockContent.querySelector('img'),
@@ -253,7 +253,7 @@ class MediaImage {
   /**
    * Returns image data
    *
-   * @returns {MediaImageData}
+   * @returns {MediaEntityData}
    */
   get data() {
     return this._data;
@@ -262,7 +262,7 @@ class MediaImage {
   /**
    * Set image data and update the view
    *
-   * @param {MediaImageData} data
+   * @param {MediaEntityData} data
    */
   set data(data) {
     this._data = Object.assign({}, this.data, data);
@@ -460,4 +460,4 @@ class MediaImage {
   }
 }
 
-module.exports = MediaImage;
+module.exports = MediaEntity;
